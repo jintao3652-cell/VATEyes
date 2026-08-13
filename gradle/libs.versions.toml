@@ -7,6 +7,7 @@ lifecycle = "2.8.7"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
 mapbox = "11.5.1"
+coil = "2.7.0"
 coreKtx = "1.10.1"
 junit = "4.13.2"
 junitVersion = "1.1.5"
@@ -34,6 +35,7 @@ converter-gson = { group = "com.squareup.retrofit2", name = "converter-gson", ve
 converter-scalars = { group = "com.squareup.retrofit2", name = "converter-scalars", version.ref = "retrofit" }
 okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
 mapbox-maps = { group = "com.mapbox.maps", name = "android", version.ref = "mapbox" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

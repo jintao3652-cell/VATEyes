@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import coil.compose.AsyncImage
 import com.google.gson.annotations.SerializedName
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -57,21 +58,28 @@ import com.mapbox.maps.plugin.gestures.gestures
 
 data class VatsimData(val general: General?, val pilots: List<Pilot> = emptyList(), val controllers: List<Controller> = emptyList(), val atis: List<Controller> = emptyList())
 data class General(@SerializedName("update_timestamp") val updateTimestamp: String? = null, @SerializedName("connected_clients") val connectedClients: Int = 0, @SerializedName("unique_users") val uniqueUsers: Int = 0)
-data class Pilot(val cid: Int = 0, val name: String = "", val callsign: String = "", val latitude: Double = 0.0, val longitude: Double = 0.0, val altitude: Int = 0, val groundspeed: Int = 0, val heading: Int = 0, @SerializedName("flight_plan") val flightPlan: FlightPlan? = null)
-data class FlightPlan(val departure: String? = null, val arrival: String? = null, val route: String? = null, val altitude: String? = null, val aircraft: String? = null)
+data class Pilot(val cid: Int = 0, val name: String = "", val callsign: String = "", val latitude: Double = 0.0, val longitude: Double = 0.0, val altitude: Int = 0, val groundspeed: Int = 0, val heading: Int = 0, val transponder: String = "", @SerializedName("flight_plan") val flightPlan: FlightPlan? = null)
+data class FlightPlan(val departure: String? = null, val arrival: String? = null, val alternate: String? = null, val route: String? = null, val altitude: String? = null, val aircraft: String? = null, @SerializedName("aircraft_short") val aircraftShort: String? = null)
 data class Controller(val cid: Int = 0, val name: String = "", val callsign: String = "", val frequency: String = "", val facility: Int = 0)
 data class Airport(val icao: String = "", val iata: String = "", val name: String = "", val city: String = "", val country: String = "", val lat: Double = 0.0, val lon: Double = 0.0)
 data class WeatherResponse(val main: WeatherMain? = null, val weather: List<WeatherDescription> = emptyList(), val wind: WeatherWind? = null)
 data class WeatherMain(val temp: Double = 0.0, @SerializedName("feels_like") val feelsLike: Double = 0.0, val humidity: Int = 0, val pressure: Int = 0)
 data class WeatherDescription(val description: String = "")
 data class WeatherWind(val speed: Double = 0.0)
-data class VatsimEvent(val id: Int = 0, val name: String = "", val description: String? = null, @SerializedName("start_time") val startTime: String? = null, @SerializedName("end_time") val endTime: String? = null, val link: String? = null)
+data class EventAirport(val icao: String = "")
+data class VatsimEvent(val id: Int = 0, val name: String = "", val description: String? = null, @SerializedName("short_description") val shortDescription: String? = null, @SerializedName("start_time") val startTime: String? = null, @SerializedName("end_time") val endTime: String? = null, val link: String? = null, val banner: String? = null, val airports: List<EventAirport> = emptyList())
 data class VatsimEventsResponse(val data: List<VatsimEvent> = emptyList())
 data class VatsimCountry(val code: String = "", val name: String = "", val division: String? = null)
 data class VatsimMember(val id: Int = 0, val name: String = "", val pilotRating: String? = null, val controllerRating: String? = null, val region: String? = null, val division: String? = null, val subdivision: String? = null)
 data class OnlineAtc(val id: Int = 0, val callsign: String = "", val start: String = "", val server: String = "", val rating: Int = 0, val fp: String? = null)
 private suspend fun loadAirports(context: Context): Map<String, Airport> = withContext(kotlinx.coroutines.Dispatchers.IO) {
-    context.assets.open("airports.json").use { input -> input.reader().use { Gson().fromJson(it, object : TypeToken<Map<String, Airport>>() {}.type) } }
+    context.assets.open("airports.json").use { input ->
+        input.reader().use {
+            val parsed: Map<String, Airport?> = Gson().fromJson(it, object : TypeToken<Map<String, Airport?>>() {}.type)
+            parsed.filterValues { airport -> airport != null }
+                .mapValues { (_, airport) -> airport!! }
+        }
+    }
 }
 
 private interface VatsimApi { @GET("v3/vatsim-data.json") suspend fun live(): VatsimData }
@@ -105,7 +113,7 @@ class MainViewModel : ViewModel() {
     var trackedCids by mutableStateOf<Set<Int>>(emptySet()); private set
     var onlineAtc by mutableStateOf<List<OnlineAtc>>(emptyList()); private set
     var countries by mutableStateOf<List<VatsimCountry>>(emptyList()); private set
-    init { refresh(); viewModelScope.launch { while (true) { delay(20_000); refresh() } } }
+    init { refresh(); viewModelScope.launch { while (true) { delay(15_000); refresh() } } }
     fun refresh() = viewModelScope.launch { loading = true; error = null; runCatching { api.live() }.onSuccess { data = it }.onFailure { error = it.message ?: "Unable to reach VATSIM" }; loading = false }
     fun loadWeather(airport: Airport) = viewModelScope.launch {
         val key = BuildConfig.OPENWEATHER_API_KEY
@@ -236,15 +244,15 @@ private fun GlassBottomNavigation(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 16.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         shape = RoundedCornerShape(32.dp),
-        color = Color.White.copy(alpha = 0.96f),
-        shadowElevation = 16.dp
+        color = Color.White.copy(alpha = 0.62f),
+        shadowElevation = 10.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 12.dp),
+                .padding(horizontal = 6.dp, vertical = 7.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -270,22 +278,22 @@ private fun GlassNavItem(
     Column(
         modifier = Modifier
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
+            .padding(horizontal = 5.dp, vertical = 5.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
             tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(28.dp)
+            modifier = Modifier.size(22.dp)
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            fontSize = 11.sp
+            fontSize = 9.sp
         )
     }
 }
@@ -362,14 +370,14 @@ private fun ModernPilotDialog(pilot: Pilot, onDismiss: () -> Unit) {
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         InfoChip("CID", "${pilot.cid}")
+                        InfoChip("Name", pilot.name)
+                        InfoChip("Callsign", pilot.callsign)
+                        InfoChip("Transponder", pilot.transponder.ifBlank { "—" })
                     }
+                }
                 }
 
                 Row(
@@ -432,13 +440,21 @@ private fun ModernPilotDialog(pilot: Pilot, onDismiss: () -> Unit) {
                                     color = MaterialTheme.colorScheme.primary
                                 )
                             }
-                            plan.aircraft?.let {
+                            (plan.aircraftShort ?: plan.aircraft)?.let {
                                 Spacer(Modifier.height(8.dp))
                                 Text(
                                     "Aircraft: $it",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onPrimaryContainer
                                 )
+                            }
+                            plan.alternate?.takeIf { it.isNotBlank() }?.let {
+                                Spacer(Modifier.height(8.dp))
+                                InfoChip("Alternate", it)
+                            }
+                            plan.altitude?.takeIf { it.isNotBlank() }?.let {
+                                Spacer(Modifier.height(8.dp))
+                                InfoChip("Cruise altitude", it)
                             }
                             plan.route?.takeIf { it.isNotBlank() }?.let { route ->
                                 Spacer(Modifier.height(8.dp))
@@ -658,6 +674,10 @@ private fun PilotList(
     modifier: Modifier,
     onPilot: (Pilot) -> Unit
 ) {
+    var search by remember { mutableStateOf("") }
+    val filteredPilots = pilots.filter { pilot ->
+        search.isBlank() || pilot.callsign.contains(search, true) || pilot.name.contains(search, true) || pilot.cid.toString().contains(search)
+    }
     LazyColumn(
         modifier = modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -671,9 +691,18 @@ private fun PilotList(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                placeholder = { Text("Search callsign, name or CID") },
+                shape = RoundedCornerShape(12.dp)
+            )
         }
 
-        if (pilots.isEmpty()) {
+        if (filteredPilots.isEmpty()) {
             item {
                 Box(
                     modifier = Modifier
@@ -688,7 +717,7 @@ private fun PilotList(
                 }
             }
         } else {
-            items(pilots) { pilot ->
+            items(filteredPilots.sortedBy { it.callsign.uppercase() }, key = { "pilot_${it.cid}_${it.callsign}" }) { pilot ->
                 ModernPilotCard(pilot, onPilot)
             }
         }
@@ -866,6 +895,7 @@ private fun FlightInfoChip(
 @Composable
 private fun ControllerList(vm: MainViewModel, modifier: Modifier) {
     LaunchedEffect(Unit) { vm.loadOnlineAtc() }
+    var search by remember { mutableStateOf("") }
 
     LazyColumn(
         modifier = modifier.padding(horizontal = 16.dp),
@@ -879,6 +909,15 @@ private fun ControllerList(vm: MainViewModel, modifier: Modifier) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 8.dp)
+            )
+            OutlinedTextField(
+                value = search,
+                onValueChange = { search = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                placeholder = { Text("Search callsign or name") },
+                shape = RoundedCornerShape(12.dp)
             )
         }
 
@@ -898,7 +937,9 @@ private fun ControllerList(vm: MainViewModel, modifier: Modifier) {
             }
         }
 
-        val controllers = vm.data?.controllers.orEmpty()
+        val controllers = vm.data?.controllers.orEmpty().filter { controller ->
+            search.isBlank() || controller.callsign.contains(search, true) || controller.name.contains(search, true)
+        }
         if (controllers.isEmpty()) {
             item {
                 Box(
@@ -914,10 +955,35 @@ private fun ControllerList(vm: MainViewModel, modifier: Modifier) {
                 }
             }
         } else {
-            items(controllers) { controller ->
-                ModernControllerCard(controller)
+            val categoryOrder = listOf("ADM", "SUP", "FSS", "CTR", "APP", "DEP", "TWR", "GND", "APN", "DEL", "OTHER", "OBS")
+            val grouped = controllers
+                .groupBy { controllerCategory(it) }
+                .toSortedMap(compareBy { categoryOrder.indexOf(it).let { index -> if (index < 0) categoryOrder.indexOf("OTHER") else index } })
+            grouped.forEach { (category, categoryControllers) ->
+                item(key = "controller_category_$category") {
+                    Text(
+                        category,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                    )
+                }
+                items(categoryControllers.sortedBy { it.callsign.uppercase() }, key = { "controller_${it.cid}_${it.callsign}" }) { controller ->
+                    ModernControllerCard(controller)
+                }
             }
         }
+    }
+}
+
+private fun controllerCategory(controller: Controller): String {
+    val callsign = controller.callsign.trim().uppercase()
+    if (controller.frequency.trim() == "199.998" || callsign.endsWith("_OBS")) return "OBS"
+    val suffix = callsign.substringAfterLast('_', "")
+    return when (suffix) {
+        "ADM", "SUP", "FSS", "CTR", "APP", "DEP", "TWR", "GND", "APN", "DEL" -> suffix
+        else -> "OTHER"
     }
 }
 
@@ -1071,6 +1137,15 @@ private fun ModernEventCard(event: VatsimEvent) {
         shadowElevation = 4.dp
     ) {
         Column(Modifier.padding(16.dp)) {
+            event.banner?.takeIf { it.isNotBlank() }?.let { bannerUrl ->
+                AsyncImage(
+                    model = bannerUrl,
+                    contentDescription = event.name,
+                    modifier = Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(12.dp)),
+                    contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                )
+                Spacer(Modifier.height(12.dp))
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1083,28 +1158,17 @@ private fun ModernEventCard(event: VatsimEvent) {
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    event.description?.let {
+                    event.shortDescription?.let {
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            it,
+                            cleanEventDescription(it),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2
+                            maxLines = Int.MAX_VALUE
                         )
                     }
                 }
 
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    shape = CircleShape
-                ) {
-                    Icon(
-                        Icons.Default.Event,
-                        null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.padding(8.dp).size(20.dp)
-                    )
-                }
             }
 
             Spacer(Modifier.height(12.dp))
@@ -1127,7 +1191,8 @@ private fun ModernEventCard(event: VatsimEvent) {
                 )
             }
 
-            event.endTime?.let {
+            /* End time intentionally omitted; the event start date is sufficient here. */
+            /* event.endTime?.let {
                 Spacer(Modifier.height(4.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1146,10 +1211,28 @@ private fun ModernEventCard(event: VatsimEvent) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            } */
+
+            if (event.airports.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Place, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Airports: ${event.airports.joinToString { it.icao }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
 }
+
+private fun cleanEventDescription(value: String): String = value
+    .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\\n")
+    .replace(Regex("<[^>]*>"), "")
+    .replace("&nbsp;", " ")
+    .replace("&amp;", "&")
+    .replace("&quot;", "\"")
+    .replace("&#39;", "'")
+    .trim()
 @Composable
 private fun Tracking(vm: MainViewModel, modifier: Modifier, onPilot: (Pilot) -> Unit) {
     var cidQuery by remember { mutableStateOf("") }
@@ -1386,7 +1469,7 @@ private fun Tracking(vm: MainViewModel, modifier: Modifier, onPilot: (Pilot) -> 
                 }
             }
         } else {
-            items(tracked) { pilot ->
+            items(tracked.sortedBy { it.callsign.uppercase() }, key = { "tracked_${it.cid}_${it.callsign}" }) { pilot ->
                 ModernPilotCard(pilot, onPilot)
             }
         }
@@ -1422,11 +1505,19 @@ private fun RatingChip(modifier: Modifier, label: String, rating: String) {
 private fun Weather(vm: MainViewModel, airports: Map<String, Airport>, modifier: Modifier) {
     var query by remember { mutableStateOf("") }
     var selectedAirport by remember { mutableStateOf<Airport?>(null) }
-    val matches = if (query.length >= 2) {
-        airports.values.filter {
-            it.icao.contains(query, true) || it.iata.contains(query, true) || it.name.contains(query, true)
-        }.take(6)
-    } else emptyList()
+    var matches by remember { mutableStateOf<List<Airport>>(emptyList()) }
+    LaunchedEffect(query, airports) {
+        matches = if (query.length >= 2) withContext(kotlinx.coroutines.Dispatchers.Default) {
+            val needle = query.trim()
+            runCatching {
+                airports.values.asSequence().mapNotNull { airport ->
+                    runCatching {
+                        if (airport.icao.contains(needle, true) || airport.iata.contains(needle, true) || airport.name.contains(needle, true)) airport else null
+                    }.getOrNull()
+                }.take(6).toList()
+            }.getOrDefault(emptyList())
+        } else emptyList()
+    }
 
     LazyColumn(
         modifier = modifier.padding(horizontal = 16.dp),

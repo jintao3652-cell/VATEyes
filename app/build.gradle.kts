@@ -63,4 +63,5 @@ dependencies {
     implementation(libs.converter.scalars)
     implementation(libs.okhttp.logging)
     implementation(libs.mapbox.maps)
+    implementation(libs.coil.compose)
 }
